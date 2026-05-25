@@ -1,0 +1,214 @@
+---
+title: "Analisis Hubungan Jumlah Rental dan Pendapatan pada Kategori Film di Database Sakila"
+author: "DARA ADE DIANA SIONEGARA - NIM: M0725062/D"
+date: "2026-05-24"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: cosmo
+    highlight: tango
+---
+
+<style>
+body {
+  font-family: "Times New Roman", serif;
+  line-height: 2;
+}
+
+/* Heading utama */
+h1 {
+  font-family: "Times New Roman", serif !important;
+  font-weight: bold !important;
+}
+
+/* Subheading */
+h2 {
+  font-family: "Times New Roman", serif !important;
+  font-weight: bold !important;
+}
+
+/* Heading kecil */
+h3 {
+  font-family: "Times New Roman", serif !important;
+  font-weight: bold !important;
+}
+
+/* Code block */
+pre {
+  background-color: #f4f4f4;
+  border-radius: 12px;
+  padding: 11px;
+}
+
+/* Inline code */
+code {
+}
+</style>
+
+# Pendahuluan
+
+## Latar Belakang
+Database Sakila merupakan database simulasi rental film yang banyak digunakan untuk latihan SQL maupun analisis data. Database ini memiliki berbagai tabel yang saling terhubung seperti data pelanggan, film, kategori film, pembayaran, dan transaksi rental.
+
+Pada laporan ini dilakukan analisis mengenai hubungan antara jumlah rental dan total pendapatan pada setiap kategori film. Insight ini dipilih untuk mengetahui apakah kategori film yang paling sering disewa juga menghasilkan pendapatan paling tinggi.
+
+# Persiapan Library
+```{r message=FALSE, warning=FALSE}
+library(DBI)
+library(RMySQL)
+library(dplyr)
+library(ggplot2)
+library(knitr)
+```
+
+# Koneksi Database
+```{r}
+con <- dbConnect(
+  RMySQL::MySQL(),
+  dbname = "sakila",
+  host = "localhost",
+  port = 3306,
+  user = "root",
+  password = "kindofme"
+)
+```
+
+# Pengambilan Data
+```{r warning=FALSE}
+query <- "
+SELECT 
+    c.name AS kategori,
+    COUNT(r.rental_id) AS jumlah_rental,
+    ROUND(SUM(p.amount),2) AS total_pendapatan
+FROM category c
+JOIN film_category fc ON c.category_id = fc.category_id
+JOIN film f ON fc.film_id = f.film_id
+JOIN inventory i ON f.film_id = i.film_id
+JOIN rental r ON i.inventory_id = r.inventory_id
+JOIN payment p ON r.rental_id = p.rental_id
+GROUP BY c.name
+ORDER BY jumlah_rental DESC
+"
+
+data_film <- dbGetQuery(con, query)
+
+kable(data_film)
+```
+
+# Visualisasi Data
+
+## 1. Jumlah Rental Berdasarkan Kategori Film
+```{r fig.width=10, fig.height=6}
+ggplot(data_film, aes(x = reorder(kategori, jumlah_rental), 
+                      y = jumlah_rental,
+                      fill = kategori)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(
+    title = "Jumlah Rental Berdasarkan Kategori Film",
+    x = "Kategori Film",
+    y = "Jumlah Rental"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+### Interpretasi
+Dari grafik terlihat bahwa ada beberapa kategori yang jauh lebih sering disewa dibanding kategori lainnya. Ini menunjukkan bahwa pelanggan memiliki minat terhadap genre film tertentu.
+
+Kategori dengan jumlah rental tinggi bisa dianggap sebagai kategori yang paling diminati pelanggan.
+
+## 2. Total Pendapatan Berdasarkan Kategori Film
+```{r fig.width=10, fig.height=6}
+ggplot(data_film, aes(x = reorder(kategori, total_pendapatan), 
+                      y = total_pendapatan,
+                      fill = kategori)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(
+    title = "Total Pendapatan Berdasarkan Kategori Film",
+    x = "Kategori Film",
+    y = "Total Pendapatan"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+### Interpretasi
+Kategori yang sering disewa ternyata cenderung menghasilkan pendapatan lebih tinggi. Namun terdapat beberapa kategori yang jumlah rentalnya tidak terlalu tinggi tetapi tetap memberikan pendapatan yang cukup besar.
+
+Hal ini menunjukkan bahwa banyaknya transaksi memang berpengaruh terhadap pendapatan, tetapi tidak sepenuhnya menentukan.
+
+## 3. Scatter Plot Hubungan Rental dan Pendapatan
+```{r fig.width=8, fig.height=6}
+ggplot(data_film, aes(x = jumlah_rental,
+                      y = total_pendapatan,
+                      label = kategori)) +
+  geom_point(size = 4) +
+  geom_text(vjust = -0.5) +
+  labs(
+    title = "Hubungan Jumlah Rental dan Total Pendapatan",
+    x = "Jumlah Rental",
+    y = "Total Pendapatan"
+  ) +
+  theme_minimal()
+```
+
+### Interpretasi
+Scatter plot menunjukkan pola hubungan positif antara jumlah rental dan total pendapatan. Semakin tinggi jumlah rental suatu kategori, maka total pendapatannya juga cenderung meningkat.
+
+Titik yang berada paling jauh bisa dikatakan sebagai kategori yang lebih unggul dibanding kategori lain.
+
+# Analisis Statistik
+```{r}
+mean_rental <- mean(data_film$jumlah_rental)
+mean_pendapatan <- mean(data_film$total_pendapatan)
+
+korelasi <- cor(data_film$jumlah_rental,
+                data_film$total_pendapatan)
+
+mean_rental
+mean_pendapatan
+korelasi
+```
+
+Persamaan mean:
+$$
+\bar{x} = \frac{\sum x}{n}
+$$
+Keterangan:
+- $\bar{x}$ = rata-rata
+- $x$ = jumlah rental
+- $n$ = banyak kategori film
+
+Persamaan korelasi Pearson:
+$$
+r = \frac{n\sum xy - (\sum x)(\sum y)}
+{\sqrt{[n\sum x^2 - (\sum x)^2][n\sum y^2 - (\sum y)^2]}}
+$$
+Keterangan:
+- \( r \) = koefisien korelasi Pearson
+- \( n \) = jumlah data
+- \( x \) = variabel jumlah rental
+- \( y \) = variabel total pendapatan
+- \( \sum xy \) = jumlah hasil perkalian antara variabel \(x\) dan \(y\)
+- \( \sum x \) = jumlah seluruh nilai variabel \(x\)
+- \( \sum y \) = jumlah seluruh nilai variabel \(y\)
+- \( \sum x^2 \) = jumlah kuadrat variabel \(x\)
+- \( \sum y^2 \) = jumlah kuadrat variabel \(y\)
+
+### Interpretasi Statistik
+Koefisien korelasi Pearson digunakan untuk mengukur kekuatan hubungan linear antara dua variabel. Nilai korelasi berada pada rentang -1 hingga 1. Pada analisis kali ini, nilai korelasi digunakan untuk melihat hubungan antara jumlah rental dan total pendapatan.
+
+Jika nilai korelasi mendekati 1, berarti hubungan keduanya kuat dan positif. Artinya kategori yang sering disewa biasanya juga menghasilkan pendapatan yang tinggi.
+
+# Kesimpulan
+Berdasarkan analisis yang telah dilakukan dapat disimpulkan bahwa kategori film dengan jumlah rental tinggi cenderung menghasilkan pendapatan yang lebih besar. Selain itu terdapat hubungan positif antara jumlah rental dan total pendapatan.
+
+Visualisasi data membantu melihat pola hubungan antar variabel dengan lebih jelas sehingga insight lebih mudah dipahami.
+
+# Menutup Koneksi
+```{r}
+dbDisconnect(con)
+```
